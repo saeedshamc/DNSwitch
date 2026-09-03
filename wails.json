@@ -1,0 +1,23 @@
+{
+  "$schema": "https://wails.io/schemas/config.v2.json",
+  "name": "DNSwitch",
+  "outputfilename": "DNSwitch",
+  "frontend:dir": "./frontend",
+  "frontend:install": "npm install",
+  "frontend:build": "npm run build",
+  "frontend:dev:watcher": "npm run dev",
+  "frontend:dev:serverUrl": "auto",
+  "wailsjsdir": "./frontend",
+  "version": "1.0.0",
+  "author": {
+    "name": "Saeed shamsi",
+    "email": "saeedshams2024@gmail.com"
+  },
+  "info": {
+    "companyName": "DNSwitch",
+    "productName": "DNSwitch",
+    "productVersion": "1.0.0",
+    "copyright": "Copyright 2026 Saeed shamsi",
+    "comments": "Local-first DNS changer for Windows and Linux"
+  }
+}

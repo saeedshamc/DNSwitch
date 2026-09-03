@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="img" aria-label="DNSwitch">
+  <defs>
+    <linearGradient id="ring" x1="40" y1="32" x2="216" y2="224" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#22D3EE"/>
+      <stop offset="1" stop-color="#818CF8"/>
+    </linearGradient>
+  </defs>
+  <rect width="256" height="256" rx="56" fill="#0B1220"/>
+  <circle cx="128" cy="128" r="78" fill="none" stroke="url(#ring)" stroke-width="12"/>
+  <ellipse cx="128" cy="128" rx="32" ry="78" fill="none" stroke="#22D3EE" stroke-width="8" opacity="0.85"/>
+  <path d="M52 128h152" fill="none" stroke="#22D3EE" stroke-width="8" opacity="0.85"/>
+  <rect x="150" y="86" width="40" height="84" rx="20" fill="#818CF8"/>
+  <circle cx="170" cy="108" r="12" fill="#22D3EE"/>
+</svg>

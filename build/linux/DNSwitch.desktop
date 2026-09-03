@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=DNSwitch
+Name[fa]=دی‌ان‌سوئیچ
+Comment=Switch system DNS servers
+Comment[fa]=تغییر سریع DNS سیستم
+Exec=DNSwitch
+Icon=dnswitch
+Categories=Network;Utility;
+Terminal=false
+StartupNotify=true

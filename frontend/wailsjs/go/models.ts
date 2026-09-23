@@ -1,5 +1,25 @@
 export namespace main {
 	
+	export class ProxyConfig {
+	    enabled: boolean;
+	    http: string;
+	    https: string;
+	    socks: string;
+	    noProxy: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new ProxyConfig(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.enabled = source["enabled"];
+	        this.http = source["http"];
+	        this.https = source["https"];
+	        this.socks = source["socks"];
+	        this.noProxy = source["noProxy"];
+	    }
+	}
 	export class DNSProfile {
 	    id: string;
 	    name: string;
@@ -24,26 +44,6 @@ export namespace main {
 	        this.isPreset = source["isPreset"];
 	        this.isAutomatic = source["isAutomatic"];
 	        this.color = source["color"];
-	    }
-	}
-	export class ProxyConfig {
-	    enabled: boolean;
-	    http: string;
-	    https: string;
-	    socks: string;
-	    noProxy: string;
-	
-	    static createFrom(source: any = {}) {
-	        return new ProxyConfig(source);
-	    }
-	
-	    constructor(source: any = {}) {
-	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.enabled = source["enabled"];
-	        this.http = source["http"];
-	        this.https = source["https"];
-	        this.socks = source["socks"];
-	        this.noProxy = source["noProxy"];
 	    }
 	}
 	export class AppSettings {
@@ -159,3 +159,4 @@ export namespace main {
 	}
 
 }
+

@@ -91,7 +91,8 @@ func (a *App) consumePending() {
 	pending := *settings.Pending
 	_ = a.cfg.Update(func(s *config.Settings) { s.Pending = nil })
 	if !elevate.IsAdmin() {
-		a.log.Error("pending action dropped because the process is not elevated")
+		// Stale pending left behind after a cancelled/failed elevation prompt.
+		a.log.Info("cleared stale pending action %q (not elevated)", pending.Action)
 		return
 	}
 	var result ApplyResult
@@ -341,6 +342,12 @@ func (a *App) SetDNSEnabled(enabled bool) ApplyResult {
 			}
 		}
 	}
+	if enabled {
+		servers := dns.NormalizeServers(settings.LastAppliedServers)
+		if err := dns.ValidateDNSServers(servers); err != nil {
+			return errResult("dns_need_profile", "Apply a DNS profile before enabling custom DNS.")
+		}
+	}
 	on := enabled
 	if result, handled := a.elevateIfNeeded(config.PendingAction{
 		Action:    "dns_toggle",
@@ -491,12 +498,10 @@ func (a *App) TestAll() []PingResult {
 }
 
 func (a *App) elevateIfNeeded(pending config.PendingAction) (ApplyResult, bool) {
-	if elevate.IsAdmin() || a.cfg == nil {
-		return ApplyResult{}, false
-	}
-	switch runtime.GOOS {
-	case "windows", "linux":
-	default:
+	// Full-process relaunch is Windows-only (UAC). On Linux the DNS/proxy
+	// managers already wrap privileged commands with pkexec, so exiting the
+	// GUI here only looks like a crash and often drops the pending action.
+	if runtime.GOOS != "windows" || elevate.IsAdmin() || a.cfg == nil {
 		return ApplyResult{}, false
 	}
 	_ = a.cfg.Update(func(s *config.Settings) {

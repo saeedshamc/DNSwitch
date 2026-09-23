@@ -71,7 +71,7 @@ const fa: Messages = {
   privacy: 'بدون تله‌متری. کاملاً آفلاین.',
   dnsControl: 'کنترل DNS',
   dnsToggle: 'DNS سفارشی',
-  dnsToggleHint: 'DNS سفارشی را روشن کنید یا به DHCP خودکار برگردید.',
+  dnsToggleHint: 'اول یک پروفایل را اعمال کنید. بعد با این سوئیچ همان را برگردانید یا به DHCP بروید.',
   dnsOn: 'DNS سفارشی روشن است',
   dnsOff: 'DNS سفارشی خاموش است (DHCP)',
   proxyControl: 'پروکسی',
@@ -88,6 +88,7 @@ const fa: Messages = {
   toastInvalidProxy: 'آدرس پروکسی معتبر به صورت host:port وارد کنید.',
   toastDnsEnabled: 'DNS سفارشی روشن شد.',
   toastDnsDisabled: 'DNS سفارشی خاموش شد.',
+  toastDnsNeedProfile: 'اول یک پروفایل DNS را اعمال کنید، بعد DNS سفارشی را روشن کنید.',
 };
 
 export default fa;

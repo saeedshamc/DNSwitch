@@ -47,6 +47,7 @@ function resultMessage(lang: Lang, result: ApplyResult): string {
     need_elevation: i18n.elevationNeeded,
     elevation_prompt: i18n.elevationBody,
     invalid_dns: i18n.toastInvalidDns,
+    dns_need_profile: i18n.toastDnsNeedProfile,
     apply_failed: i18n.toastApplyFailed,
     invalid_interface: i18n.noInterfaces,
     invalid_profile: i18n.toastApplyFailed,

@@ -69,7 +69,7 @@ const en = {
   privacy: 'No telemetry. Fully offline.',
   dnsControl: 'DNS control',
   dnsToggle: 'Custom DNS',
-  dnsToggleHint: 'Turn custom DNS on or restore automatic DHCP.',
+  dnsToggleHint: 'Apply a profile first. Then use this switch to restore it or go back to DHCP.',
   dnsOn: 'Custom DNS is on',
   dnsOff: 'Custom DNS is off (DHCP)',
   proxyControl: 'Proxy',
@@ -86,6 +86,7 @@ const en = {
   toastInvalidProxy: 'Enter a valid proxy host:port address.',
   toastDnsEnabled: 'Custom DNS enabled.',
   toastDnsDisabled: 'Custom DNS disabled.',
+  toastDnsNeedProfile: 'Apply a DNS profile first, then turn custom DNS on.',
 };
 
 export type Messages = typeof en;

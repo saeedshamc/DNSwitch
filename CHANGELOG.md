@@ -29,6 +29,8 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). Versioning follo
 
 - Linux elevation relaunch keeps `DISPLAY` / Wayland / DBus environment so the GUI can open after `pkexec`.
 - `sudo` wrap no longer forces non-interactive `-n` (which failed silently without a cached password).
+- Custom DNS toggle no longer closes the Linux GUI (elevation uses per-command `pkexec` instead of restarting the app).
+- Clearing system proxy on Linux now asks for administrator access at most once (batched into a single elevated script).
 
 ### Packaging outputs in this release
 

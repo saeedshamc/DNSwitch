@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"unicode"
 
 	"github.com/saeedshamc/DNSwitch/backend/cmdutil"
 	"github.com/saeedshamc/DNSwitch/backend/elevate"
@@ -49,15 +50,53 @@ func (m *linuxManager) has(name string) bool {
 	return false
 }
 
-func (m *linuxManager) runElevated(name string, args ...string) cmdutil.Result {
-	helper, prefix := elevate.WrapPrefix()
-	if helper == "" {
-		return m.run.Run(name, args...)
+// runElevatedScript runs one bash script under a single pkexec/sudo prompt.
+func (m *linuxManager) runElevatedScript(script string) error {
+	tmp, err := os.CreateTemp("/tmp", "dnswitch-proxy-sh-")
+	if err != nil {
+		return err
 	}
-	full := append([]string{}, prefix...)
-	full = append(full, name)
-	full = append(full, args...)
-	return m.run.Run(helper, full...)
+	tmpPath := tmp.Name()
+	if _, err := tmp.WriteString("#!/bin/bash\nset -euo pipefail\n" + script); err != nil {
+		tmp.Close()
+		_ = os.Remove(tmpPath)
+		return err
+	}
+	tmp.Close()
+	_ = os.Chmod(tmpPath, 0o700)
+
+	helper, prefix := elevate.WrapPrefix()
+	var res cmdutil.Result
+	if helper == "" {
+		res = m.run.Run(m.bin("bash"), tmpPath)
+	} else {
+		args := append(append([]string{}, prefix...), m.bin("bash"), tmpPath)
+		res = m.run.Run(helper, args...)
+	}
+	_ = os.Remove(tmpPath)
+	if res.Failed() {
+		return fmt.Errorf("%w: %s", ErrApplyFailed, strings.TrimSpace(res.Combined()))
+	}
+	return nil
+}
+
+func shellQuote(s string) string {
+	return "'" + strings.ReplaceAll(s, "'", `'"'"'`) + "'"
+}
+
+func safeConnName(name string) bool {
+	if name == "" || len(name) > 128 {
+		return false
+	}
+	for _, r := range name {
+		if r == 0 || unicode.IsControl(r) {
+			return false
+		}
+		if strings.ContainsRune("\"'`$&|;<>\\\n\r\t", r) {
+			return false
+		}
+	}
+	return true
 }
 
 func (m *linuxManager) Get() (Config, error) {
@@ -165,15 +204,10 @@ func (m *linuxManager) Set(cfg Config) error {
 			ok = true
 		}
 	}
-	if err := m.writeEnvDropIn(cfg); err != nil {
+	if err := m.applySystemProxy(cfg); err != nil {
 		errs = append(errs, err.Error())
 	} else {
 		ok = true
-	}
-	if m.has("nmcli") {
-		if err := m.setNetworkManager(cfg); err == nil {
-			ok = true
-		}
 	}
 	if !ok {
 		if len(errs) == 0 {
@@ -191,25 +225,32 @@ func fileExists(path string) bool {
 
 func (m *linuxManager) Clear() error {
 	var errs []string
+	// Desktop proxy: user-level, no admin prompt.
 	if m.has("gsettings") {
 		res := m.run.Run(m.bin("gsettings"), "set", "org.gnome.system.proxy", "mode", "none")
 		if res.Failed() {
 			errs = append(errs, strings.TrimSpace(res.Combined()))
 		}
 	}
-	if err := m.removeEnvDropIn(); err != nil {
+	// System-wide bits: one elevation for env drop-in + NetworkManager.
+	if err := m.clearSystemProxy(); err != nil {
 		errs = append(errs, err.Error())
 	}
-	if m.has("nmcli") {
-		_ = m.clearNetworkManager()
+	if len(errs) == 0 {
+		return nil
 	}
-	if len(errs) > 0 && m.has("gsettings") {
+	// Success if gsettings is off and the drop-in is gone.
+	if m.has("gsettings") {
 		mode := strings.Trim(strings.TrimSpace(m.run.Run(m.bin("gsettings"), "get", "org.gnome.system.proxy", "mode").Stdout), "'\" \n")
-		if mode != "none" && mode != "auto" && fileExists(envDropIn) {
-			return fmt.Errorf("%w: %s", ErrApplyFailed, strings.Join(errs, "; "))
+		if (mode == "none" || mode == "auto") && !fileExists(envDropIn) {
+			return nil
 		}
 	}
-	return nil
+	if !fileExists(envDropIn) && len(errs) > 0 {
+		// Drop-in gone; treat as cleared even if NM tweak failed.
+		return nil
+	}
+	return fmt.Errorf("%w: %s", ErrApplyFailed, strings.Join(errs, "; "))
 }
 
 func (m *linuxManager) setGSettings(cfg Config) error {
@@ -274,7 +315,7 @@ func gsettingsList(noProxy string) string {
 	return "[" + strings.Join(quoted, ", ") + "]"
 }
 
-func (m *linuxManager) writeEnvDropIn(cfg Config) error {
+func (m *linuxManager) buildEnvFileContents(cfg Config) string {
 	var b strings.Builder
 	b.WriteString("# Managed by DNSwitch — local proxy settings\n")
 	write := func(key, addr string) {
@@ -310,38 +351,99 @@ func (m *linuxManager) writeEnvDropIn(cfg Config) error {
 	b.WriteString("NO_PROXY=")
 	b.WriteString(noProxy)
 	b.WriteByte('\n')
+	return b.String()
+}
 
-	tmp, err := os.CreateTemp("/tmp", "dnswitch-proxy-")
+func (m *linuxManager) applySystemProxy(cfg Config) error {
+	envBody := m.buildEnvFileContents(cfg)
+	envTmp, err := os.CreateTemp("/tmp", "dnswitch-proxy-env-")
 	if err != nil {
 		return err
 	}
-	tmpPath := tmp.Name()
-	if _, err := tmp.WriteString(b.String()); err != nil {
-		tmp.Close()
-		_ = os.Remove(tmpPath)
+	envPath := envTmp.Name()
+	if _, err := envTmp.WriteString(envBody); err != nil {
+		envTmp.Close()
+		_ = os.Remove(envPath)
 		return err
 	}
-	tmp.Close()
+	envTmp.Close()
+	defer os.Remove(envPath)
 
-	_ = m.runElevated(m.bin("mkdir"), "-p", "/etc/environment.d")
-	res := m.runElevated(m.bin("cp"), tmpPath, envDropIn)
-	_ = os.Remove(tmpPath)
-	if res.Failed() {
-		return fmt.Errorf("%w: environment drop-in: %s", ErrApplyFailed, strings.TrimSpace(res.Combined()))
+	var b strings.Builder
+	b.WriteString("mkdir -p /etc/environment.d\n")
+	b.WriteString("cp ")
+	b.WriteString(shellQuote(envPath))
+	b.WriteString(" ")
+	b.WriteString(shellQuote(envDropIn))
+	b.WriteString("\n")
+	b.WriteString("chmod 644 ")
+	b.WriteString(shellQuote(envDropIn))
+	b.WriteString("\n")
+
+	httpURL := ""
+	if cfg.HTTP != "" {
+		httpURL = "http://" + cfg.HTTP
+	} else if cfg.Socks != "" {
+		httpURL = "socks5://" + cfg.Socks
 	}
-	_ = m.runElevated(m.bin("chmod"), "644", envDropIn)
-	return nil
+	if m.has("nmcli") && httpURL != "" {
+		nmcli := m.bin("nmcli")
+		for _, conn := range m.activeNMConnections() {
+			if !safeConnName(conn) {
+				continue
+			}
+			cq := shellQuote(conn)
+			b.WriteString(shellQuote(nmcli) + " con mod " + cq + " proxy.method manual\n")
+			b.WriteString(shellQuote(nmcli) + " con mod " + cq + " proxy.browser-only no\n")
+			b.WriteString(shellQuote(nmcli) + " con mod " + cq + " proxy.http " + shellQuote(httpURL) + "\n")
+			if cfg.HTTPS != "" {
+				b.WriteString(shellQuote(nmcli) + " con mod " + cq + " proxy.https " + shellQuote("http://"+cfg.HTTPS) + "\n")
+			}
+			if cfg.Socks != "" {
+				b.WriteString(shellQuote(nmcli) + " con mod " + cq + " proxy.socks " + shellQuote("socks5://"+cfg.Socks) + "\n")
+			}
+			if cfg.NoProxy != "" {
+				b.WriteString(shellQuote(nmcli) + " con mod " + cq + " proxy.no-proxy " + shellQuote(cfg.NoProxy) + "\n")
+			}
+		}
+	}
+
+	return m.runElevatedScript(b.String())
 }
 
-func (m *linuxManager) removeEnvDropIn() error {
-	if !fileExists(envDropIn) {
+func (m *linuxManager) clearSystemProxy() error {
+	needEnv := fileExists(envDropIn)
+	conns := []string{}
+	if m.has("nmcli") {
+		conns = m.activeNMConnections()
+	}
+	if !needEnv && len(conns) == 0 {
 		return nil
 	}
-	res := m.runElevated(m.bin("rm"), "-f", envDropIn)
-	if res.Failed() {
-		return fmt.Errorf("%w: %s", ErrApplyFailed, strings.TrimSpace(res.Combined()))
+
+	var b strings.Builder
+	if needEnv {
+		b.WriteString("rm -f ")
+		b.WriteString(shellQuote(envDropIn))
+		b.WriteString("\n")
 	}
-	return nil
+	if m.has("nmcli") {
+		nmcli := m.bin("nmcli")
+		for _, conn := range conns {
+			if !safeConnName(conn) {
+				continue
+			}
+			cq := shellQuote(conn)
+			b.WriteString(shellQuote(nmcli) + " con mod " + cq + " proxy.method none || true\n")
+			b.WriteString(shellQuote(nmcli) + " con mod " + cq + " proxy.http '' || true\n")
+			b.WriteString(shellQuote(nmcli) + " con mod " + cq + " proxy.https '' || true\n")
+			b.WriteString(shellQuote(nmcli) + " con mod " + cq + " proxy.socks '' || true\n")
+		}
+	}
+	if b.Len() == 0 {
+		return nil
+	}
+	return m.runElevatedScript(b.String())
 }
 
 func (m *linuxManager) activeNMConnections() []string {
@@ -350,6 +452,7 @@ func (m *linuxManager) activeNMConnections() []string {
 		return nil
 	}
 	var names []string
+	seen := map[string]bool{}
 	for _, line := range strings.Split(res.Stdout, "\n") {
 		line = strings.TrimSpace(line)
 		if line == "" {
@@ -360,47 +463,11 @@ func (m *linuxManager) activeNMConnections() []string {
 			continue
 		}
 		name := parts[0]
-		if name == "" || name == "--" {
+		if name == "" || name == "--" || seen[name] {
 			continue
 		}
+		seen[name] = true
 		names = append(names, name)
 	}
 	return names
-}
-
-func (m *linuxManager) setNetworkManager(cfg Config) error {
-	httpURL := ""
-	if cfg.HTTP != "" {
-		httpURL = "http://" + cfg.HTTP
-	} else if cfg.Socks != "" {
-		httpURL = "socks5://" + cfg.Socks
-	}
-	if httpURL == "" {
-		return nil
-	}
-	for _, conn := range m.activeNMConnections() {
-		_ = m.runElevated(m.bin("nmcli"), "con", "mod", conn, "proxy.method", "manual")
-		_ = m.runElevated(m.bin("nmcli"), "con", "mod", conn, "proxy.browser-only", "no")
-		_ = m.runElevated(m.bin("nmcli"), "con", "mod", conn, "proxy.http", httpURL)
-		if cfg.HTTPS != "" {
-			_ = m.runElevated(m.bin("nmcli"), "con", "mod", conn, "proxy.https", "http://"+cfg.HTTPS)
-		}
-		if cfg.Socks != "" {
-			_ = m.runElevated(m.bin("nmcli"), "con", "mod", conn, "proxy.socks", "socks5://"+cfg.Socks)
-		}
-		if cfg.NoProxy != "" {
-			_ = m.runElevated(m.bin("nmcli"), "con", "mod", conn, "proxy.no-proxy", cfg.NoProxy)
-		}
-	}
-	return nil
-}
-
-func (m *linuxManager) clearNetworkManager() error {
-	for _, conn := range m.activeNMConnections() {
-		_ = m.runElevated(m.bin("nmcli"), "con", "mod", conn, "proxy.method", "none")
-		_ = m.runElevated(m.bin("nmcli"), "con", "mod", conn, "proxy.http", "")
-		_ = m.runElevated(m.bin("nmcli"), "con", "mod", conn, "proxy.https", "")
-		_ = m.runElevated(m.bin("nmcli"), "con", "mod", conn, "proxy.socks", "")
-	}
-	return nil
 }

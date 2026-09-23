@@ -2,9 +2,11 @@
 
 [English](#english) · [فارسی](#persian)
 
-Local-first desktop DNS changer for **Windows** and **Linux**. Switch between popular resolvers, add custom profiles, measure latency, and restore DHCP — with no telemetry and no external servers.
+Local-first desktop DNS **and system proxy** changer for **Windows** and **Linux**. Switch resolvers, toggle custom DNS, set HTTP/HTTPS/SOCKS proxy, measure latency, and restore DHCP — with no telemetry and no external servers.
 
-Built with [Wails v2](https://wails.io) (Go + React + TypeScript + Tailwind CSS). Wails entry files (`main.go`, `app.go`) stay at the repository root; OS-specific DNS logic lives under `backend/`.
+**Current version: [1.1.0](CHANGELOG.md)** · Build guide: [`docs/BUILD.md`](docs/BUILD.md)
+
+Built with [Wails v2](https://wails.io) (Go + React + TypeScript + Tailwind CSS).
 
 ---
 
@@ -16,6 +18,9 @@ Built with [Wails v2](https://wails.io) (Go + React + TypeScript + Tailwind CSS)
 
 - Preset providers: Google, Cloudflare, Quad9, OpenDNS, Shecan, Electro, plus Automatic / DHCP
 - Custom DNS profiles (IPv4 and IPv6)
+- **Custom DNS on/off toggle** (off → DHCP, on → last applied servers)
+- **System proxy** (HTTP / HTTPS / SOCKS + bypass list) on Windows and Linux
+- **Admin elevation** before privileged DNS changes (UAC / `pkexec`)
 - Per-adapter or all-adapters apply
 - Latency test (real DNS query, not ICMP)
 - Flush OS DNS cache
@@ -34,7 +39,7 @@ To add a provider, edit **one file**: `backend/dns/presets.json`.
 - **Windows:** WebView2 (preinstalled on current Windows 10/11)
 - **Linux:** `libgtk-3-dev`, `libwebkit2gtk-4.0-dev` (or `4.1`), and optionally `libayatana-appindicator3-dev` for the tray icon
 
-Changing DNS needs administrator / root access. On Windows the app triggers UAC when you apply a change. On Linux it uses `pkexec` (or `sudo`) and explains why elevation is required.
+Changing DNS needs administrator / root access. On Windows the app triggers UAC. On Linux it uses `pkexec` (or `sudo`) and explains why elevation is required.
 
 ### Run in development
 
@@ -49,25 +54,18 @@ go test ./backend/...
 cd frontend && npm install && npm run lint
 ```
 
-### Build
+### Build outputs
 
-**Windows**
+| Output | Command | Path |
+|--------|---------|------|
+| Windows portable | `wails build -platform windows/amd64` | `build/bin/DNSwitch.exe` |
+| Windows installer | `wails build -platform windows/amd64 -nsis` | `build/bin/*setup*.exe` |
+| Linux binary | `wails build -platform linux/amd64` (+ `-tags webkit2_41` on WebKit 4.1) | `build/bin/DNSwitch` |
+| Linux `.deb` | `bash scripts/linux-deb.sh` | `build/bin/dnswitch_<ver>_amd64.deb` |
+| Linux AppImage / tar.gz | `bash scripts/linux-appimage.sh` | `build/bin/DNSwitch-x86_64.AppImage` or `.tar.gz` |
 
-```bash
-wails build -platform windows/amd64
-wails build -platform windows/amd64 -nsis
-```
-
-Output: `build/bin/DNSwitch.exe` and, with `-nsis`, an installer.
-
-**Linux**
-
-```bash
-wails build -platform linux/amd64
-bash scripts/linux-appimage.sh
-```
-
-Output: `build/bin/DNSwitch`. The script also builds an AppImage when `appimagetool` is installed, otherwise a `.tar.gz`. A `.deb` can be produced later with a packager such as `nfpm` using the same binary and `build/linux/DNSwitch.desktop`.
+Full explanations for each artifact (what it is, how to install, release checklist): **[`docs/BUILD.md`](docs/BUILD.md)**.  
+What changed per version: **[`CHANGELOG.md`](CHANGELOG.md)**.
 
 ### Config and logs
 
@@ -78,7 +76,7 @@ Nothing in this folder is uploaded anywhere.
 
 ### Linux DNS backends
 
-The app detects the active network stack:
+The app tries, in order, until one succeeds:
 
 1. NetworkManager → `nmcli`
 2. systemd-resolved → `resolvectl`
@@ -86,7 +84,7 @@ The app detects the active network stack:
 
 ### Security notes
 
-System commands are executed with `exec.Command` and separate argument slices. Interface names and DNS addresses are validated before use. Previous DNS state is snapshotted and rolled back if an apply fails.
+System commands use `exec.Command` with separate argument slices. Interface names, DNS addresses, and proxy host:port values are validated before use. Previous DNS state is snapshotted and rolled back if an apply fails.
 
 ---
 
@@ -94,31 +92,26 @@ System commands are executed with `exec.Command` and separate argument slices. I
 
 ## فارسی
 
-دی‌ان‌سوئیچ یک برنامه دسکتاپ **محلی** برای ویندوز و لینوکس است. بدون تله‌متری و بدون سرور خارجی، DNS سیستم را عوض می‌کنید، پروفایل سفارشی می‌سازید، تأخیر را می‌سنجید و در صورت نیاز به DHCP برمی‌گردید.
+دی‌ان‌سوئیچ یک برنامه دسکتاپ **محلی** برای ویندوز و لینوکس است: تغییر DNS، روشن/خاموش DNS سفارشی، و تنظیم پروکسی سیستم — بدون تله‌متری و بدون سرور خارجی.
+
+**نسخه فعلی: [۱.۱.۰](CHANGELOG.md)** · راهنمای ساخت خروجی‌ها: [`docs/BUILD.md`](docs/BUILD.md)
 
 ### امکانات
 
-- ارائه‌دهنده‌های آماده: گوگل، کلودفلر، کواد۹، اوپن‌دی‌ان‌اس، شکن، الکترو و حالت خودکار (DHCP)
+- ارائه‌دهنده‌های آماده + حالت خودکار (DHCP)
 - پروفایل DNS سفارشی (IPv4 و IPv6)
-- اعمال روی یک کارت شبکه یا همه آداپتورهای فعال
-- تست تأخیر با کوئری واقعی DNS
-- خالی کردن کش DNS سیستم
-- سینی سیستم برای تعویض سریع علاقه‌مندی‌ها
-- رابط دوزبانه انگلیسی / فارسی با پشتیبانی RTL
-- پوسته تیره و روشن
-- ذخیره تنظیمات فقط در یک فایل JSON محلی
-
-برای افزودن ارائه‌دهنده جدید فقط فایل `backend/dns/presets.json` را ویرایش کنید.
+- **سوئیچ روشن/خاموش DNS سفارشی**
+- **پروکسی سیستم** (HTTP / HTTPS / SOCKS)
+- **درخواست دسترسی مدیر** قبل از تغییر DNS
+- اعمال روی یک یا همه آداپتورها، تست تأخیر، خالی کردن کش
+- سینی سیستم، رابط دوزبانه با RTL، پوسته تیره/روشن
+- ذخیره فقط در JSON محلی
 
 ### پیش‌نیازها
 
-- Go ۱.۲۳ یا جدیدتر
-- Node.js ۱۸ یا جدیدتر
-- Wails CLI نسخه ۲.۱۰
+- Go ۱.۲۳+، Node.js ۱۸+، Wails CLI ۲.۱۰+
 - ویندوز: WebView2
-- لینوکس: GTK و WebKitGTK (و در صورت نیاز کتابخانه AppIndicator برای آیکون سینی)
-
-تغییر DNS به دسترسی مدیر / root نیاز دارد. در ویندوز هنگام اعمال، پنجره UAC باز می‌شود. در لینوکس از `pkexec` یا `sudo` استفاده می‌شود.
+- لینوکس: GTK و WebKitGTK ۴.۰ یا ۴.۱
 
 ### اجرای توسعه
 
@@ -126,25 +119,23 @@ System commands are executed with `exec.Command` and separate argument slices. I
 wails dev
 ```
 
-### ساخت نسخه نهایی
+### خروجی‌های ساخت
 
-```bash
-# ویندوز
-wails build -platform windows/amd64 -nsis
+| خروجی | دستور | مسیر |
+|--------|--------|------|
+| ویندوز قابل‌حمل | `wails build -platform windows/amd64` | `build/bin/DNSwitch.exe` |
+| نصب‌کننده ویندوز | `wails build -platform windows/amd64 -nsis` | `build/bin/*setup*.exe` |
+| باینری لینوکس | `wails build -platform linux/amd64` (روی Kali: `-tags webkit2_41`) | `build/bin/DNSwitch` |
+| بسته `.deb` | `bash scripts/linux-deb.sh` | `build/bin/dnswitch_<ver>_amd64.deb` |
+| AppImage / tar.gz | `bash scripts/linux-appimage.sh` | `build/bin/…` |
 
-# لینوکس
-wails build -platform linux/amd64
-bash scripts/linux-appimage.sh
-```
-
-خروجی در پوشه `build/bin` قرار می‌گیرد.
+توضیح کامل هر نوع خروجی: **[`docs/BUILD.md`](docs/BUILD.md)**  
+تاریخچه تغییرات نسخه: **[`CHANGELOG.md`](CHANGELOG.md)**
 
 ### مسیر تنظیمات و لاگ
 
 - ویندوز: `%AppData%\DNSwitch\`
 - لینوکس: `~/.config/DNSwitch/`
-
-هیچ داده‌ای از این پوشه به بیرون ارسال نمی‌شود.
 
 ### مجوز
 

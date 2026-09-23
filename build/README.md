@@ -1,35 +1,43 @@
 # Build Directory
 
-The build directory is used to house all the build files and assets for your application. 
+Houses build assets and **compiled release artifacts**.
 
-The structure is:
+## Layout
 
-* bin - Output directory
-* darwin - macOS specific files
-* windows - Windows specific files
+| Path | Role |
+|------|------|
+| `bin/` | **All build outputs** (exe, deb, AppImage, tar.gz, raw Linux binary) |
+| `darwin/` | macOS plist templates (future / optional) |
+| `windows/` | Windows manifest, icon, NSIS installer assets, `info.json` |
+| `linux/` | Desktop entry (`DNSwitch.desktop`) used by `.deb` and AppImage |
+| `appicon.png` / `appicon.svg` | Application icon source |
+
+## Output types (quick map)
+
+See the full guide: [`docs/BUILD.md`](../docs/BUILD.md) · version history: [`CHANGELOG.md`](../CHANGELOG.md)
+
+| Artifact | How |
+|----------|-----|
+| `DNSwitch.exe` | `wails build -platform windows/amd64` |
+| NSIS setup exe | `wails build -platform windows/amd64 -nsis` |
+| `DNSwitch` (Linux) | `wails build -platform linux/amd64` (+ `-tags webkit2_41` if needed) |
+| `dnswitch_*_amd64.deb` | `bash scripts/linux-deb.sh` |
+| AppImage / `.tar.gz` | `bash scripts/linux-appimage.sh` |
+
+Do not commit large binaries from `bin/` (they are gitignored). Document and ship them via GitHub Releases.
 
 ## Mac
 
 The `darwin` directory holds files specific to Mac builds.
 These may be customised and used as part of the build. To return these files to the default state, simply delete them
-and
-build with `wails build`.
+and build with `wails build`.
 
-The directory contains the following files:
-
-- `Info.plist` - the main plist file used for Mac builds. It is used when building using `wails build`.
-- `Info.dev.plist` - same as the main plist file but used when building using `wails dev`.
+- `Info.plist` — used by `wails build`
+- `Info.dev.plist` — used by `wails dev`
 
 ## Windows
 
-The `windows` directory contains the manifest and rc files used when building with `wails build`.
-These may be customised for your application. To return these files to the default state, simply delete them and
-build with `wails build`.
-
-- `icon.ico` - The icon used for the application. This is used when building using `wails build`. If you wish to
-  use a different icon, simply replace this file with your own. If it is missing, a new `icon.ico` file
-  will be created using the `appicon.png` file in the build directory.
-- `installer/*` - The files used to create the Windows installer. These are used when building using `wails build`.
-- `info.json` - Application details used for Windows builds. The data here will be used by the Windows installer,
-  as well as the application itself (right click the exe -> properties -> details)
-- `wails.exe.manifest` - The main application manifest file.
+- `icon.ico` — application icon for Windows builds
+- `installer/*` — NSIS installer resources
+- `info.json` — version/product metadata for the exe and installer
+- `wails.exe.manifest` — application manifest

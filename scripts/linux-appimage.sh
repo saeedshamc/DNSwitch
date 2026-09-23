@@ -3,11 +3,20 @@ set -euo pipefail
 
 # Build a simple AppImage from the Wails Linux binary.
 # Requires: wails, appimagetool (optional; falls back to a .tar.gz).
+# Optional: WAILS_TAGS=webkit2_41  (auto-detected when only WebKitGTK 4.1 exists)
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 
-wails build -platform linux/amd64 -clean
+TAGS_ARGS=()
+if [[ -n "${WAILS_TAGS:-}" ]]; then
+  TAGS_ARGS=(-tags "$WAILS_TAGS")
+elif pkg-config --exists webkit2gtk-4.1 2>/dev/null && ! pkg-config --exists webkit2gtk-4.0 2>/dev/null; then
+  TAGS_ARGS=(-tags webkit2_41)
+  echo "detected WebKitGTK 4.1 only — building with -tags webkit2_41"
+fi
+
+wails build -platform linux/amd64 -clean "${TAGS_ARGS[@]}"
 
 BIN="$ROOT/build/bin/DNSwitch"
 if [[ ! -x "$BIN" ]]; then

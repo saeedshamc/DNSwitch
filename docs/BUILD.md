@@ -96,7 +96,7 @@ wails build -platform linux/amd64 -clean -tags webkit2_41
 
 ```bash
 bash scripts/linux-deb.sh
-# optional: VERSION=1.1.0 bash scripts/linux-deb.sh
+# optional: VERSION=1.1.1 bash scripts/linux-deb.sh
 ```
 
 **Output:** `build/bin/dnswitch_<version>_amd64.deb`
@@ -156,7 +156,7 @@ tar -xzf DNSwitch-linux-amd64.tar.gz
 1. Bump version in `wails.json`, i18n `version` strings, and `CHANGELOG.md`.
 2. `go test ./backend/...` and `cd frontend && npm run lint`.
 3. Build Windows (`-nsis`) and Linux (binary + `linux-deb.sh` + optional AppImage).
-4. Tag `v1.1.0` and push — CI attaches Windows/Linux artifacts on `v*` tags.
+4. Tag `v1.1.1` and push — CI attaches Windows/Linux artifacts on `v*` tags.
 5. Manually attach `.deb` / AppImage if not yet in CI.
 
 ---

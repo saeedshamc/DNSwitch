@@ -1,5 +1,6 @@
 import { t } from '../i18n';
 import { useAppStore } from '../store/useAppStore';
+import logoUrl from '../assets/logo.svg';
 
 export default function Header() {
   const lang = useAppStore((s) => s.lang);
@@ -35,9 +36,14 @@ export default function Header() {
   return (
     <header className="flex flex-wrap items-center gap-3 border-b border-slate-200/80 bg-white/80 px-5 py-3 backdrop-blur dark:border-white/10 dark:bg-slate-950/70">
       <div className="flex items-center gap-3">
-        <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-gradient-to-br from-cyan-400 to-indigo-500 text-sm font-black text-slate-950 shadow-lg shadow-cyan-500/20">
-          DNS
-        </div>
+        <img
+          src={logoUrl}
+          alt={i18n.appName}
+          width={40}
+          height={40}
+          className="h-10 w-10 rounded-2xl shadow-lg shadow-cyan-500/25 ring-1 ring-cyan-400/20"
+          draggable={false}
+        />
         <div>
           <div className="text-base font-semibold tracking-tight">{i18n.appName}</div>
           <div className="text-xs text-slate-500 dark:text-slate-400">{i18n.tagline}</div>

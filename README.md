@@ -4,7 +4,7 @@
 
 Local-first desktop DNS **and system proxy** changer for **Windows** and **Linux**. Switch resolvers, toggle custom DNS, set HTTP/HTTPS/SOCKS proxy, measure latency, and restore DHCP — with no telemetry and no external servers.
 
-**Current version: [1.1.0](CHANGELOG.md)** · Build guide: [`docs/BUILD.md`](docs/BUILD.md)
+**Current version: [1.1.1](CHANGELOG.md)** · Build guide: [`docs/BUILD.md`](docs/BUILD.md)
 
 Built with [Wails v2](https://wails.io) (Go + React + TypeScript + Tailwind CSS).
 
@@ -94,7 +94,7 @@ System commands use `exec.Command` with separate argument slices. Interface name
 
 دی‌ان‌سوئیچ یک برنامه دسکتاپ **محلی** برای ویندوز و لینوکس است: تغییر DNS، روشن/خاموش DNS سفارشی، و تنظیم پروکسی سیستم — بدون تله‌متری و بدون سرور خارجی.
 
-**نسخه فعلی: [۱.۱.۰](CHANGELOG.md)** · راهنمای ساخت خروجی‌ها: [`docs/BUILD.md`](docs/BUILD.md)
+**نسخه فعلی: [۱.۱.۱](CHANGELOG.md)** · راهنمای ساخت خروجی‌ها: [`docs/BUILD.md`](docs/BUILD.md)
 
 ### امکانات
 

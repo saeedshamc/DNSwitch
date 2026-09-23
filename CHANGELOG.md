@@ -6,6 +6,19 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). Versioning follo
 
 ---
 
+## [1.1.1] — 2026-09-23
+
+### Changed
+
+- New app branding: switch + network orbit logo (SVG/PNG/ICO) used in the UI header, window icon, tray, and installers.
+
+### Fixed
+
+- Custom DNS toggle no longer closes the Linux GUI (elevation uses per-command `pkexec` instead of restarting the app).
+- Clearing system proxy on Linux now asks for administrator access at most once (batched into a single elevated script).
+
+---
+
 ## [1.1.0] — 2026-09-23
 
 ### Added
@@ -29,8 +42,6 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). Versioning follo
 
 - Linux elevation relaunch keeps `DISPLAY` / Wayland / DBus environment so the GUI can open after `pkexec`.
 - `sudo` wrap no longer forces non-interactive `-n` (which failed silently without a cached password).
-- Custom DNS toggle no longer closes the Linux GUI (elevation uses per-command `pkexec` instead of restarting the app).
-- Clearing system proxy on Linux now asks for administrator access at most once (batched into a single elevated script).
 
 ### Packaging outputs in this release
 
@@ -59,6 +70,12 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). Versioning follo
 ---
 
 ## فارسی — خلاصه نسخه‌ها
+
+### ۱.۱.۱ (۲۳ سپتامبر ۲۰۲۶)
+
+- لوگوی جدید (سوئیچ + مدار شبکه)
+- رفع کرش سوئیچ DNS سفارشی در لینوکس
+- حذف پروکسی با حداکثر یک درخواست ادمین
 
 ### ۱.۱.۰ (۲۳ سپتامبر ۲۰۲۶)
 

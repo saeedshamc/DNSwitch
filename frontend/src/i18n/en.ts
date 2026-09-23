@@ -65,7 +65,7 @@ const en = {
   close: 'Close',
   quit: 'Quit',
   confirmDelete: 'Delete this custom profile?',
-  version: 'Version 1.1.0',
+  version: 'Version 1.1.1',
   privacy: 'No telemetry. Fully offline.',
   dnsControl: 'DNS control',
   dnsToggle: 'Custom DNS',

@@ -8,7 +8,7 @@
   "frontend:dev:watcher": "npm run dev",
   "frontend:dev:serverUrl": "auto",
   "wailsjsdir": "./frontend",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "author": {
     "name": "Saeed shamsi",
     "email": "saeedshams2024@gmail.com"
@@ -16,7 +16,7 @@
   "info": {
     "companyName": "DNSwitch",
     "productName": "DNSwitch",
-    "productVersion": "1.1.0",
+    "productVersion": "1.1.1",
     "copyright": "Copyright 2026 Saeed shamsi",
     "comments": "Local-first DNS and system proxy changer for Windows and Linux"
   }

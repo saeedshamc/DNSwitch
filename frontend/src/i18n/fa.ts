@@ -67,7 +67,7 @@ const fa: Messages = {
   close: 'بستن',
   quit: 'خروج',
   confirmDelete: 'این پروفایل سفارشی حذف شود؟',
-  version: 'نسخه ۱.۱.۰',
+  version: 'نسخه ۱.۱.۱',
   privacy: 'بدون تله‌متری. کاملاً آفلاین.',
   dnsControl: 'کنترل DNS',
   dnsToggle: 'DNS سفارشی',

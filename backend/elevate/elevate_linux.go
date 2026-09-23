@@ -18,14 +18,37 @@ func relaunch() error {
 	if err != nil {
 		return err
 	}
-	helper, err := exec.LookPath("pkexec")
-	if err != nil {
-		helper, err = exec.LookPath("sudo")
-		if err != nil {
-			return fmt.Errorf("neither pkexec nor sudo is available")
+
+	var helper string
+	var args []string
+	if p, err := exec.LookPath("pkexec"); err == nil {
+		helper = p
+		// Preserve the graphical session so the elevated Wails window can open.
+		args = []string{"env"}
+		for _, key := range []string{
+			"DISPLAY",
+			"WAYLAND_DISPLAY",
+			"XAUTHORITY",
+			"XDG_RUNTIME_DIR",
+			"DBUS_SESSION_BUS_ADDRESS",
+			"XDG_CURRENT_DESKTOP",
+			"XDG_SESSION_TYPE",
+			"LANG",
+			"LC_ALL",
+		} {
+			if val := os.Getenv(key); val != "" {
+				args = append(args, key+"="+val)
+			}
 		}
+		args = append(args, exe)
+	} else if p, err := exec.LookPath("sudo"); err == nil {
+		helper = p
+		args = []string{exe}
+	} else {
+		return fmt.Errorf("neither pkexec nor sudo is available")
 	}
-	cmd := exec.Command(helper, exe)
+
+	cmd := exec.Command(helper, args...)
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
@@ -41,7 +64,9 @@ func wrapPrefix() (string, []string) {
 		return p, nil
 	}
 	if p, err := exec.LookPath("sudo"); err == nil {
-		return p, []string{"-n"}
+		// Prefer an interactive prompt when a TTY is available; -n would
+		// silently fail when credentials are not cached.
+		return p, nil
 	}
 	return "", nil
 }

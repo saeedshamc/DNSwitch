@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import Header from './components/Header';
 import InterfaceBar from './components/InterfaceBar';
+import SystemPanel from './components/SystemPanel';
 import CustomProfileModal from './components/CustomProfileModal';
 import SettingsPage from './components/SettingsPage';
 import Toast from './components/Toast';
@@ -55,6 +56,7 @@ export default function App() {
       <div className="relative mx-auto flex min-h-screen max-w-6xl flex-col">
         <Header />
         <InterfaceBar />
+        <SystemPanel />
         <HomePage />
       </div>
       {modalOpen ? <CustomProfileModal /> : null}

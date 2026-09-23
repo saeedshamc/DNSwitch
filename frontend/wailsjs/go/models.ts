@@ -26,6 +26,26 @@ export namespace main {
 	        this.color = source["color"];
 	    }
 	}
+	export class ProxyConfig {
+	    enabled: boolean;
+	    http: string;
+	    https: string;
+	    socks: string;
+	    noProxy: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new ProxyConfig(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.enabled = source["enabled"];
+	        this.http = source["http"];
+	        this.https = source["https"];
+	        this.socks = source["socks"];
+	        this.noProxy = source["noProxy"];
+	    }
+	}
 	export class AppSettings {
 	    language: string;
 	    theme: string;
@@ -33,6 +53,9 @@ export namespace main {
 	    customProfiles: DNSProfile[];
 	    lastInterface: string;
 	    applyToAll: boolean;
+	    dnsEnabled: boolean;
+	    lastAppliedServers: string[];
+	    proxy: ProxyConfig;
 	
 	    static createFrom(source: any = {}) {
 	        return new AppSettings(source);
@@ -46,6 +69,9 @@ export namespace main {
 	        this.customProfiles = this.convertValues(source["customProfiles"], DNSProfile);
 	        this.lastInterface = source["lastInterface"];
 	        this.applyToAll = source["applyToAll"];
+	        this.dnsEnabled = source["dnsEnabled"];
+	        this.lastAppliedServers = source["lastAppliedServers"];
+	        this.proxy = this.convertValues(source["proxy"], ProxyConfig);
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
@@ -133,4 +159,3 @@ export namespace main {
 	}
 
 }
-

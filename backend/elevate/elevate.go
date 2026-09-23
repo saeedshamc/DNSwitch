@@ -2,7 +2,7 @@ package elevate
 
 // Explain returns a short English reason shown before an elevation prompt.
 func Explain() string {
-	return "Changing system DNS servers requires administrator or root access so the operating system will accept the new resolver addresses."
+	return "Changing system DNS or proxy settings requires administrator or root access so the operating system will accept the new configuration."
 }
 
 // IsAdmin reports whether the current process already has elevated rights.

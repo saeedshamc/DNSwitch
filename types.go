@@ -4,6 +4,7 @@ import (
 	"github.com/saeedshamc/DNSwitch/backend/config"
 	"github.com/saeedshamc/DNSwitch/backend/dns"
 	"github.com/saeedshamc/DNSwitch/backend/network"
+	"github.com/saeedshamc/DNSwitch/backend/proxy"
 )
 
 // NetworkInterface is the adapter record shown in the UI.
@@ -30,14 +31,26 @@ type DNSProfile struct {
 	Color       string   `json:"color"`
 }
 
+// ProxyConfig is the system proxy form shown in the UI.
+type ProxyConfig struct {
+	Enabled bool   `json:"enabled"`
+	HTTP    string `json:"http"`
+	HTTPS   string `json:"https"`
+	Socks   string `json:"socks"`
+	NoProxy string `json:"noProxy"`
+}
+
 // AppSettings is the persisted UI/user configuration.
 type AppSettings struct {
-	Language       string       `json:"language"`
-	Theme          string       `json:"theme"`
-	Favorites      []string     `json:"favorites"`
-	CustomProfiles []DNSProfile `json:"customProfiles"`
-	LastInterface  string       `json:"lastInterface"`
-	ApplyToAll     bool         `json:"applyToAll"`
+	Language           string       `json:"language"`
+	Theme              string       `json:"theme"`
+	Favorites          []string     `json:"favorites"`
+	CustomProfiles     []DNSProfile `json:"customProfiles"`
+	LastInterface      string       `json:"lastInterface"`
+	ApplyToAll         bool         `json:"applyToAll"`
+	DNSEnabled         bool         `json:"dnsEnabled"`
+	LastAppliedServers []string     `json:"lastAppliedServers"`
+	Proxy              ProxyConfig  `json:"proxy"`
 }
 
 // ApplyResult is a user-facing outcome of a privileged operation.
@@ -103,18 +116,41 @@ func toProfile(in DNSProfile) dns.Profile {
 	}
 }
 
+func fromProxy(in proxy.Config) ProxyConfig {
+	return ProxyConfig{
+		Enabled: in.Enabled,
+		HTTP:    in.HTTP,
+		HTTPS:   in.HTTPS,
+		Socks:   in.Socks,
+		NoProxy: in.NoProxy,
+	}
+}
+
+func toProxy(in ProxyConfig) proxy.Config {
+	return proxy.Config{
+		Enabled: in.Enabled,
+		HTTP:    in.HTTP,
+		HTTPS:   in.HTTPS,
+		Socks:   in.Socks,
+		NoProxy: in.NoProxy,
+	}
+}
+
 func fromSettings(in config.Settings) AppSettings {
 	customs := make([]DNSProfile, 0, len(in.CustomProfiles))
 	for _, p := range in.CustomProfiles {
 		customs = append(customs, fromProfile(p))
 	}
 	return AppSettings{
-		Language:       in.Language,
-		Theme:          in.Theme,
-		Favorites:      in.Favorites,
-		CustomProfiles: customs,
-		LastInterface:  in.LastInterface,
-		ApplyToAll:     in.ApplyToAll,
+		Language:           in.Language,
+		Theme:              in.Theme,
+		Favorites:          nonempty(in.Favorites),
+		CustomProfiles:     customs,
+		LastInterface:      in.LastInterface,
+		ApplyToAll:         in.ApplyToAll,
+		DNSEnabled:         in.DNSEnabled,
+		LastAppliedServers: nonempty(in.LastAppliedServers),
+		Proxy:              fromProxy(in.Proxy),
 	}
 }
 

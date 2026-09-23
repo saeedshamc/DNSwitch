@@ -6,6 +6,10 @@ export function ApplyDNS(arg1, arg2, arg3) {
   return window['go']['main']['App']['ApplyDNS'](arg1, arg2, arg3);
 }
 
+export function ClearProxy() {
+  return window['go']['main']['App']['ClearProxy']();
+}
+
 export function DeleteCustomProfile(arg1) {
   return window['go']['main']['App']['DeleteCustomProfile'](arg1);
 }
@@ -34,6 +38,10 @@ export function GetPresets() {
   return window['go']['main']['App']['GetPresets']();
 }
 
+export function GetProxy() {
+  return window['go']['main']['App']['GetProxy']();
+}
+
 export function GetSettings() {
   return window['go']['main']['App']['GetSettings']();
 }
@@ -58,12 +66,20 @@ export function SaveCustomProfile(arg1) {
   return window['go']['main']['App']['SaveCustomProfile'](arg1);
 }
 
+export function SetDNSEnabled(arg1) {
+  return window['go']['main']['App']['SetDNSEnabled'](arg1);
+}
+
 export function SetFavorite(arg1, arg2) {
   return window['go']['main']['App']['SetFavorite'](arg1, arg2);
 }
 
 export function SetPreferences(arg1, arg2, arg3, arg4) {
   return window['go']['main']['App']['SetPreferences'](arg1, arg2, arg3, arg4);
+}
+
+export function SetProxy(arg1) {
+  return window['go']['main']['App']['SetProxy'](arg1);
 }
 
 export function TestAll() {

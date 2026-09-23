@@ -9,27 +9,33 @@ import (
 	"sync"
 
 	"github.com/saeedshamc/DNSwitch/backend/dns"
+	"github.com/saeedshamc/DNSwitch/backend/proxy"
 )
 
 const appDirName = "DNSwitch"
 
 // PendingAction is executed once after a successful elevation relaunch.
 type PendingAction struct {
-	Action    string   `json:"action"`
-	Interface string   `json:"interface"`
-	Servers   []string `json:"servers"`
-	ApplyAll  bool     `json:"applyAll"`
+	Action    string        `json:"action"`
+	Interface string        `json:"interface"`
+	Servers   []string      `json:"servers"`
+	ApplyAll  bool          `json:"applyAll"`
+	DNSOn     *bool         `json:"dnsOn,omitempty"`
+	Proxy     *proxy.Config `json:"proxy,omitempty"`
 }
 
 // Settings is the on-disk JSON configuration. No data leaves this machine.
 type Settings struct {
-	Language       string         `json:"language"`
-	Theme          string         `json:"theme"`
-	Favorites      []string       `json:"favorites"`
-	CustomProfiles []dns.Profile  `json:"customProfiles"`
-	LastInterface  string         `json:"lastInterface"`
-	ApplyToAll     bool           `json:"applyToAll"`
-	Pending        *PendingAction `json:"pending,omitempty"`
+	Language           string         `json:"language"`
+	Theme              string         `json:"theme"`
+	Favorites          []string       `json:"favorites"`
+	CustomProfiles     []dns.Profile  `json:"customProfiles"`
+	LastInterface      string         `json:"lastInterface"`
+	ApplyToAll         bool           `json:"applyToAll"`
+	DNSEnabled         bool           `json:"dnsEnabled"`
+	LastAppliedServers []string       `json:"lastAppliedServers"`
+	Proxy              proxy.Config   `json:"proxy"`
+	Pending            *PendingAction `json:"pending,omitempty"`
 }
 
 // File is a thread-safe settings document bound to a path.
@@ -128,10 +134,13 @@ func (f *File) saveLocked() error {
 
 func defaults() Settings {
 	return Settings{
-		Language:       "",
-		Theme:          "dark",
-		Favorites:      []string{"cloudflare", "shecan"},
-		CustomProfiles: []dns.Profile{},
+		Language:           "",
+		Theme:              "dark",
+		Favorites:          []string{"cloudflare", "shecan"},
+		CustomProfiles:     []dns.Profile{},
+		DNSEnabled:         false,
+		LastAppliedServers: []string{},
+		Proxy:              proxy.Config{},
 	}
 }
 
@@ -148,6 +157,11 @@ func sanitize(s Settings) Settings {
 	if s.CustomProfiles == nil {
 		s.CustomProfiles = []dns.Profile{}
 	}
+	if s.LastAppliedServers == nil {
+		s.LastAppliedServers = []string{}
+	}
+	s.LastAppliedServers = dns.NormalizeServers(s.LastAppliedServers)
+	s.Proxy = proxy.Sanitize(s.Proxy)
 	return s
 }
 
@@ -155,9 +169,18 @@ func clone(s Settings) Settings {
 	out := s
 	out.Favorites = append([]string{}, s.Favorites...)
 	out.CustomProfiles = append([]dns.Profile{}, s.CustomProfiles...)
+	out.LastAppliedServers = append([]string{}, s.LastAppliedServers...)
 	if s.Pending != nil {
 		p := *s.Pending
 		p.Servers = append([]string{}, s.Pending.Servers...)
+		if s.Pending.DNSOn != nil {
+			v := *s.Pending.DNSOn
+			p.DNSOn = &v
+		}
+		if s.Pending.Proxy != nil {
+			pc := *s.Pending.Proxy
+			p.Proxy = &pc
+		}
 		out.Pending = &p
 	}
 	return out

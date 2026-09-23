@@ -161,7 +161,60 @@ func (m *linuxManager) SetDNS(interfaceName string, dnsServers []string) error {
 	if err := ValidateDNSServers(servers); err != nil {
 		return err
 	}
-	switch m.strategy {
+	var last error
+	for _, strategy := range m.strategies() {
+		if err := m.setWith(strategy, interfaceName, servers); err != nil {
+			last = err
+			continue
+		}
+		return nil
+	}
+	if last == nil {
+		last = ErrApplyFailed
+	}
+	return last
+}
+
+func (m *linuxManager) ResetToDHCP(interfaceName string) error {
+	if err := ValidateInterfaceName(interfaceName); err != nil {
+		return err
+	}
+	var last error
+	for _, strategy := range m.strategies() {
+		if err := m.resetWith(strategy, interfaceName); err != nil {
+			last = err
+			continue
+		}
+		return nil
+	}
+	if last == nil {
+		last = ErrApplyFailed
+	}
+	return last
+}
+
+// strategies returns the preferred DNS backends for this host, primary first,
+// then any other available mechanism so changes work across NetworkManager,
+// systemd-resolved, and plain /etc/resolv.conf setups.
+func (m *linuxManager) strategies() []Strategy {
+	primary := m.strategy
+	seen := map[Strategy]bool{primary: true}
+	out := []Strategy{primary}
+	add := func(s Strategy, available bool) {
+		if !available || seen[s] {
+			return
+		}
+		seen[s] = true
+		out = append(out, s)
+	}
+	add(StrategyNetworkManager, m.env.HasCommand("nmcli"))
+	add(StrategyResolved, m.env.HasCommand("resolvectl") || m.env.HasCommand("systemd-resolve"))
+	add(StrategyResolvConf, true)
+	return out
+}
+
+func (m *linuxManager) setWith(strategy Strategy, interfaceName string, servers []string) error {
+	switch strategy {
 	case StrategyNetworkManager:
 		return m.nmSet(interfaceName, servers)
 	case StrategyResolved:
@@ -171,11 +224,8 @@ func (m *linuxManager) SetDNS(interfaceName string, dnsServers []string) error {
 	}
 }
 
-func (m *linuxManager) ResetToDHCP(interfaceName string) error {
-	if err := ValidateInterfaceName(interfaceName); err != nil {
-		return err
-	}
-	switch m.strategy {
+func (m *linuxManager) resetWith(strategy Strategy, interfaceName string) error {
+	switch strategy {
 	case StrategyNetworkManager:
 		return m.nmReset(interfaceName)
 	case StrategyResolved:

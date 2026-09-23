@@ -6,26 +6,31 @@ import type {
   Lang,
   NetworkInterface,
   PingResult,
+  ProxyConfig,
   Theme,
   ToastState,
 } from '../lib/types';
 import { detectLang, t } from '../i18n';
 import {
   ApplyDNS,
+  ClearProxy,
   DeleteCustomProfile,
   FlushCache,
   GetInterfaces,
   GetLogPath,
   GetPlatform,
   GetPresets,
+  GetProxy,
   GetSettings,
   IsElevated,
   QuitApplication,
   RequestElevation,
   ResetToDHCP,
   SaveCustomProfile,
+  SetDNSEnabled,
   SetFavorite,
   SetPreferences,
+  SetProxy,
   TestAll,
   TestProfile,
 } from '../../wailsjs/go/main/App';
@@ -45,14 +50,21 @@ function resultMessage(lang: Lang, result: ApplyResult): string {
     apply_failed: i18n.toastApplyFailed,
     invalid_interface: i18n.noInterfaces,
     invalid_profile: i18n.toastApplyFailed,
+    invalid_proxy: i18n.toastInvalidProxy,
     config: i18n.toastApplyFailed,
     unsupported: i18n.toastApplyFailed,
+    proxy_applied: i18n.toastProxyApplied,
+    proxy_cleared: i18n.toastProxyCleared,
   };
   return map[result.code] || result.message || i18n.statusError;
 }
 
 function asList<T>(value: T[] | null | undefined): T[] {
   return Array.isArray(value) ? value : [];
+}
+
+function emptyProxy(): ProxyConfig {
+  return { enabled: false, http: '', https: '', socks: '', noProxy: '' };
 }
 
 async function safeCall<T>(fn: () => Promise<T>, fallback: T): Promise<T> {
@@ -73,6 +85,8 @@ interface AppState {
   interfaces: NetworkInterface[];
   selectedInterface: string;
   applyToAll: boolean;
+  dnsEnabled: boolean;
+  proxy: ProxyConfig;
   presets: DNSProfile[];
   customs: DNSProfile[];
   favorites: string[];
@@ -93,6 +107,10 @@ interface AppState {
   setTheme: (theme: Theme) => Promise<void>;
   setInterface: (name: string) => Promise<void>;
   setApplyToAll: (value: boolean) => Promise<void>;
+  setDNSEnabled: (enabled: boolean) => Promise<void>;
+  setProxyField: <K extends keyof ProxyConfig>(key: K, value: ProxyConfig[K]) => void;
+  applyProxy: () => Promise<void>;
+  clearProxy: () => Promise<void>;
   applyProfile: (profile: DNSProfile) => Promise<void>;
   resetDhcp: () => Promise<void>;
   flush: () => Promise<void>;
@@ -132,6 +150,8 @@ export const useAppStore = create<AppState>((set, get) => ({
   interfaces: [],
   selectedInterface: '',
   applyToAll: false,
+  dnsEnabled: false,
+  proxy: emptyProxy(),
   presets: [],
   customs: [],
   favorites: [],
@@ -148,13 +168,14 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   boot: async () => {
     try {
-      const [settings, presets, ifaces, platform, elevated, logPath] = await Promise.all([
+      const [settings, presets, ifaces, platform, elevated, logPath, liveProxy] = await Promise.all([
         safeCall(GetSettings, {} as AppSettings),
         safeCall(GetPresets, [] as DNSProfile[]),
         safeCall(GetInterfaces, [] as NetworkInterface[]),
         safeCall(GetPlatform, ''),
         safeCall(IsElevated, false),
         safeCall(GetLogPath, ''),
+        safeCall(GetProxy, emptyProxy()),
       ]);
       const ifaceList = asList(ifaces);
       const lang: Lang = settings.language === 'fa' || settings.language === 'en' ? settings.language : detectLang();
@@ -163,6 +184,13 @@ export const useAppStore = create<AppState>((set, get) => ({
         settings.lastInterface && ifaceList.some((i) => i.name === settings.lastInterface)
           ? settings.lastInterface
           : ifaceList.find((i) => i.isUp)?.name || ifaceList[0]?.name || '';
+      const proxy: ProxyConfig = {
+        enabled: Boolean(liveProxy?.enabled ?? settings.proxy?.enabled),
+        http: liveProxy?.http || settings.proxy?.http || '',
+        https: liveProxy?.https || settings.proxy?.https || '',
+        socks: liveProxy?.socks || settings.proxy?.socks || '',
+        noProxy: liveProxy?.noProxy || settings.proxy?.noProxy || '',
+      };
       set({
         lang,
         theme,
@@ -173,6 +201,8 @@ export const useAppStore = create<AppState>((set, get) => ({
         customs: asList(settings.customProfiles),
         favorites: asList(settings.favorites),
         applyToAll: Boolean(settings.applyToAll),
+        dnsEnabled: Boolean(settings.dnsEnabled),
+        proxy,
         interfaces: ifaceList,
         selectedInterface: selected,
         loading: false,
@@ -193,7 +223,11 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   refreshInterfaces: async () => {
     const ifaces = await safeCall(GetInterfaces, [] as NetworkInterface[]);
-    set({ interfaces: asList(ifaces) });
+    const settings = await safeCall(GetSettings, {} as AppSettings);
+    set({
+      interfaces: asList(ifaces),
+      dnsEnabled: Boolean(settings.dnsEnabled),
+    });
   },
 
   persistPrefs: async (patch) => {
@@ -223,6 +257,58 @@ export const useAppStore = create<AppState>((set, get) => ({
     await get().persistPrefs({ applyToAll: value });
   },
 
+  setDNSEnabled: async (enabled) => {
+    set({ applying: true });
+    try {
+      const result = await SetDNSEnabled(enabled);
+      get().handleResult(result);
+      if (result.success && !result.needsElevation) {
+        set({ dnsEnabled: enabled });
+      }
+      await get().refreshInterfaces();
+    } catch {
+      get().handleResult({ success: false, code: 'apply_failed', message: '', needsElevation: false });
+    } finally {
+      set({ applying: false });
+    }
+  },
+
+  setProxyField: (key, value) => {
+    set({ proxy: { ...get().proxy, [key]: value } });
+  },
+
+  applyProxy: async () => {
+    set({ applying: true });
+    try {
+      const payload = { ...get().proxy, enabled: true };
+      const result = await SetProxy(payload);
+      get().handleResult(result);
+      if (result.success && !result.needsElevation) {
+        const live = await safeCall(GetProxy, payload);
+        set({ proxy: { ...payload, ...live, enabled: true } });
+      }
+    } catch {
+      get().handleResult({ success: false, code: 'apply_failed', message: '', needsElevation: false });
+    } finally {
+      set({ applying: false });
+    }
+  },
+
+  clearProxy: async () => {
+    set({ applying: true });
+    try {
+      const result = await ClearProxy();
+      get().handleResult(result);
+      if (result.success && !result.needsElevation) {
+        set({ proxy: { ...get().proxy, enabled: false } });
+      }
+    } catch {
+      get().handleResult({ success: false, code: 'apply_failed', message: '', needsElevation: false });
+    } finally {
+      set({ applying: false });
+    }
+  },
+
   applyProfile: async (profile) => {
     set({ applying: true, status: 'idle' });
     try {
@@ -237,6 +323,9 @@ export const useAppStore = create<AppState>((set, get) => ({
         );
       }
       get().handleResult(result);
+      if (result.success && !result.needsElevation) {
+        set({ dnsEnabled: !profile.isAutomatic });
+      }
       await get().refreshInterfaces();
     } catch {
       get().handleResult({ success: false, code: 'apply_failed', message: '', needsElevation: false });
@@ -250,6 +339,9 @@ export const useAppStore = create<AppState>((set, get) => ({
     try {
       const result = await ResetToDHCP(get().selectedInterface, get().applyToAll);
       get().handleResult(result);
+      if (result.success && !result.needsElevation) {
+        set({ dnsEnabled: false });
+      }
       await get().refreshInterfaces();
     } catch {
       get().handleResult({ success: false, code: 'apply_failed', message: '', needsElevation: false });
@@ -325,6 +417,8 @@ export const useAppStore = create<AppState>((set, get) => ({
       }
     } catch {
       get().handleResult({ success: false, code: 'apply_failed', message: '', needsElevation: false });
+    } finally {
+      /* keep modal state */
     }
   },
 

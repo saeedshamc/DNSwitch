@@ -15,6 +15,7 @@ import (
 	"github.com/saeedshamc/DNSwitch/backend/elevate"
 	"github.com/saeedshamc/DNSwitch/backend/logger"
 	"github.com/saeedshamc/DNSwitch/backend/network"
+	"github.com/saeedshamc/DNSwitch/backend/proxy"
 	wailsruntime "github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
@@ -24,6 +25,7 @@ type App struct {
 	cfg           *config.File
 	log           *logger.Logger
 	mgr           dns.DNSManager
+	proxy         proxy.Manager
 	tray          *trayMenu
 	startupResult *ApplyResult
 	mu            sync.Mutex
@@ -43,7 +45,9 @@ func (a *App) startup(ctx context.Context) {
 	if logPath, err := config.LogPath(); err == nil {
 		a.log, _ = logger.New(logPath)
 	}
-	a.mgr = dns.NewManager(cmdutil.ExecRunner{})
+	runner := cmdutil.ExecRunner{}
+	a.mgr = dns.NewManager(runner)
+	a.proxy = proxy.NewManager(runner)
 	a.log.Info("application started on %s", runtime.GOOS)
 
 	a.consumePending()
@@ -97,7 +101,19 @@ func (a *App) consumePending() {
 	case "reset":
 		result = a.resetDHCP(pending.Interface, pending.ApplyAll)
 	case "flush":
-		result = a.FlushCache()
+		result = a.flushCacheNow()
+	case "dns_toggle":
+		if pending.DNSOn == nil {
+			return
+		}
+		result = a.setDNSEnabledNow(*pending.DNSOn, pending.Interface, pending.ApplyAll)
+	case "proxy_set":
+		if pending.Proxy == nil {
+			return
+		}
+		result = a.setProxyNow(*pending.Proxy)
+	case "proxy_clear":
+		result = a.clearProxyNow()
 	default:
 		return
 	}
@@ -290,7 +306,12 @@ func (a *App) ApplyDNS(interfaceName string, servers []string, applyAll bool) Ap
 	if err := dns.ValidateDNSServers(servers); err != nil {
 		return errResult("invalid_dns", "Enter a valid DNS server address.")
 	}
-	if result, handled := a.elevateIfNeeded("set", interfaceName, servers, applyAll); handled {
+	if result, handled := a.elevateIfNeeded(config.PendingAction{
+		Action:    "set",
+		Interface: interfaceName,
+		Servers:   servers,
+		ApplyAll:  applyAll,
+	}); handled {
 		return result
 	}
 	return a.applyServers(interfaceName, servers, applyAll)
@@ -298,10 +319,90 @@ func (a *App) ApplyDNS(interfaceName string, servers []string, applyAll bool) Ap
 
 // ResetToDHCP restores automatic DNS assignment.
 func (a *App) ResetToDHCP(interfaceName string, applyAll bool) ApplyResult {
-	if result, handled := a.elevateIfNeeded("reset", interfaceName, nil, applyAll); handled {
+	if result, handled := a.elevateIfNeeded(config.PendingAction{
+		Action:    "reset",
+		Interface: interfaceName,
+		ApplyAll:  applyAll,
+	}); handled {
 		return result
 	}
 	return a.resetDHCP(interfaceName, applyAll)
+}
+
+// SetDNSEnabled turns custom DNS on (re-apply last servers) or off (DHCP).
+func (a *App) SetDNSEnabled(enabled bool) ApplyResult {
+	settings := a.GetSettings()
+	iface := settings.LastInterface
+	if iface == "" {
+		for _, n := range a.GetInterfaces() {
+			if n.IsUp {
+				iface = n.Name
+				break
+			}
+		}
+	}
+	on := enabled
+	if result, handled := a.elevateIfNeeded(config.PendingAction{
+		Action:    "dns_toggle",
+		Interface: iface,
+		ApplyAll:  settings.ApplyToAll,
+		DNSOn:     &on,
+	}); handled {
+		return result
+	}
+	return a.setDNSEnabledNow(enabled, iface, settings.ApplyToAll)
+}
+
+// GetProxy returns the live system proxy configuration when available,
+// falling back to the last saved values.
+func (a *App) GetProxy() ProxyConfig {
+	if a.proxy != nil {
+		if live, err := a.proxy.Get(); err == nil {
+			return fromProxy(live)
+		}
+	}
+	if a.cfg != nil {
+		return fromProxy(a.cfg.Get().Proxy)
+	}
+	return ProxyConfig{}
+}
+
+// SetProxy applies system proxy settings (Windows Internet Settings / WinHTTP,
+// Linux gsettings + environment.d + NetworkManager when available).
+func (a *App) SetProxy(cfg ProxyConfig) ApplyResult {
+	pc := proxy.Sanitize(toProxy(cfg))
+	if err := proxy.ValidateConfig(pc); err != nil {
+		return errResult("invalid_proxy", "Enter a valid proxy host:port address.")
+	}
+	result := a.setProxyNow(pc)
+	if result.Success || elevate.IsAdmin() {
+		return result
+	}
+	// Retry once via elevated relaunch when the OS rejected the change.
+	if result.NeedsElevation || result.Code == "apply_failed" {
+		pendingCfg := pc
+		if elevated, handled := a.elevateIfNeeded(config.PendingAction{
+			Action: "proxy_set",
+			Proxy:  &pendingCfg,
+		}); handled {
+			return elevated
+		}
+	}
+	return result
+}
+
+// ClearProxy disables system proxy settings.
+func (a *App) ClearProxy() ApplyResult {
+	result := a.clearProxyNow()
+	if result.Success || elevate.IsAdmin() {
+		return result
+	}
+	if result.NeedsElevation || result.Code == "apply_failed" {
+		if elevated, handled := a.elevateIfNeeded(config.PendingAction{Action: "proxy_clear"}); handled {
+			return elevated
+		}
+	}
+	return result
 }
 
 // FlushCache clears the OS DNS resolver cache.
@@ -310,12 +411,24 @@ func (a *App) FlushCache() ApplyResult {
 		return errResult("apply_failed", "DNS manager is not available.")
 	}
 	err := a.mgr.FlushCache()
-	if err != nil && runtime.GOOS == "windows" && !elevate.IsAdmin() && isAccessDenied(err.Error()) {
-		if elevated, handled := a.elevateIfNeeded("flush", "", nil, false); handled {
+	if err != nil && !elevate.IsAdmin() && isAccessDenied(err.Error()) {
+		if elevated, handled := a.elevateIfNeeded(config.PendingAction{Action: "flush"}); handled {
 			return elevated
 		}
 	}
 	if err != nil {
+		a.log.Error("flush cache: %v", err)
+		return errResult("apply_failed", "Could not flush the DNS cache.")
+	}
+	a.log.Info("flushed DNS cache")
+	return okResult("flushed", "DNS cache flushed.")
+}
+
+func (a *App) flushCacheNow() ApplyResult {
+	if a.mgr == nil {
+		return errResult("apply_failed", "DNS manager is not available.")
+	}
+	if err := a.mgr.FlushCache(); err != nil {
 		a.log.Error("flush cache: %v", err)
 		return errResult("apply_failed", "Could not flush the DNS cache.")
 	}
@@ -377,21 +490,33 @@ func (a *App) TestAll() []PingResult {
 	return results
 }
 
-func (a *App) elevateIfNeeded(action, iface string, servers []string, applyAll bool) (ApplyResult, bool) {
-	if runtime.GOOS != "windows" || elevate.IsAdmin() || a.cfg == nil {
+func (a *App) elevateIfNeeded(pending config.PendingAction) (ApplyResult, bool) {
+	if elevate.IsAdmin() || a.cfg == nil {
+		return ApplyResult{}, false
+	}
+	switch runtime.GOOS {
+	case "windows", "linux":
+	default:
 		return ApplyResult{}, false
 	}
 	_ = a.cfg.Update(func(s *config.Settings) {
-		s.Pending = &config.PendingAction{
-			Action:    action,
-			Interface: iface,
-			Servers:   servers,
-			ApplyAll:  applyAll,
+		copyPending := pending
+		if pending.Servers != nil {
+			copyPending.Servers = append([]string{}, pending.Servers...)
 		}
+		if pending.DNSOn != nil {
+			v := *pending.DNSOn
+			copyPending.DNSOn = &v
+		}
+		if pending.Proxy != nil {
+			pc := *pending.Proxy
+			copyPending.Proxy = &pc
+		}
+		s.Pending = &copyPending
 	})
 	if err := elevate.Relaunch(); err != nil {
 		_ = a.cfg.Update(func(s *config.Settings) { s.Pending = nil })
-		a.log.Error("uac relaunch: %v", err)
+		a.log.Error("elevation relaunch: %v", err)
 		return ApplyResult{
 			Success:        false,
 			Code:           "need_elevation",
@@ -433,6 +558,7 @@ func (a *App) applyServers(interfaceName string, servers []string, applyAll bool
 		return mapApplyErr(first)
 	}
 	a.rememberInterface(interfaceName, applyAll)
+	a.rememberDNSState(true, servers)
 	a.refreshTray()
 	return okResult("applied", "DNS servers applied.")
 }
@@ -459,8 +585,78 @@ func (a *App) resetDHCP(interfaceName string, applyAll bool) ApplyResult {
 		return mapApplyErr(first)
 	}
 	a.rememberInterface(interfaceName, applyAll)
+	a.rememberDNSState(false, nil)
 	a.refreshTray()
 	return okResult("reset", "Restored automatic DNS.")
+}
+
+func (a *App) setDNSEnabledNow(enabled bool, interfaceName string, applyAll bool) ApplyResult {
+	if enabled {
+		servers := []string{}
+		if a.cfg != nil {
+			servers = append([]string{}, a.cfg.Get().LastAppliedServers...)
+		}
+		servers = dns.NormalizeServers(servers)
+		if err := dns.ValidateDNSServers(servers); err != nil {
+			return errResult("invalid_dns", "Apply a DNS profile before enabling custom DNS.")
+		}
+		return a.applyServers(interfaceName, servers, applyAll)
+	}
+	return a.resetDHCP(interfaceName, applyAll)
+}
+
+func (a *App) setProxyNow(cfg proxy.Config) ApplyResult {
+	if a.proxy == nil {
+		return errResult("apply_failed", "Proxy manager is not available.")
+	}
+	cfg = proxy.Sanitize(cfg)
+	if err := proxy.ValidateConfig(cfg); err != nil {
+		return errResult("invalid_proxy", "Enter a valid proxy host:port address.")
+	}
+	if err := a.proxy.Set(cfg); err != nil {
+		a.log.Error("set proxy: %v", err)
+		if isAccessDenied(err.Error()) {
+			return ApplyResult{Code: "need_elevation", Message: elevate.Explain(), NeedsElevation: true}
+		}
+		return errResult("apply_failed", "Could not apply proxy settings.")
+	}
+	if a.cfg != nil {
+		_ = a.cfg.Update(func(s *config.Settings) { s.Proxy = cfg })
+	}
+	a.log.Info("proxy settings applied (enabled=%v)", cfg.Enabled)
+	return okResult("proxy_applied", "Proxy settings applied.")
+}
+
+func (a *App) clearProxyNow() ApplyResult {
+	if a.proxy == nil {
+		return errResult("apply_failed", "Proxy manager is not available.")
+	}
+	if err := a.proxy.Clear(); err != nil {
+		a.log.Error("clear proxy: %v", err)
+		if isAccessDenied(err.Error()) {
+			return ApplyResult{Code: "need_elevation", Message: elevate.Explain(), NeedsElevation: true}
+		}
+		return errResult("apply_failed", "Could not clear proxy settings.")
+	}
+	if a.cfg != nil {
+		_ = a.cfg.Update(func(s *config.Settings) {
+			s.Proxy.Enabled = false
+		})
+	}
+	a.log.Info("proxy settings cleared")
+	return okResult("proxy_cleared", "Proxy settings cleared.")
+}
+
+func (a *App) rememberDNSState(enabled bool, servers []string) {
+	if a.cfg == nil {
+		return
+	}
+	_ = a.cfg.Update(func(s *config.Settings) {
+		s.DNSEnabled = enabled
+		if enabled && len(servers) > 0 {
+			s.LastAppliedServers = append([]string{}, servers...)
+		}
+	})
 }
 
 func (a *App) targets(interfaceName string, applyAll bool) ([]string, error) {
@@ -539,9 +735,12 @@ func mapApplyErr(err error) ApplyResult {
 		return ApplyResult{Code: "need_elevation", Message: elevate.Explain(), NeedsElevation: true}
 	case errors.Is(err, dns.ErrNotSupported):
 		return errResult("unsupported", "This operating system is not supported.")
+	case errors.Is(err, proxy.ErrInvalidProxy), errors.Is(err, proxy.ErrEmptyProxy):
+		return errResult("invalid_proxy", "Enter a valid proxy host:port address.")
 	default:
 		msg := strings.TrimSpace(err.Error())
-		if strings.Contains(strings.ToLower(msg), "access") || strings.Contains(strings.ToLower(msg), "denied") {
+		lower := strings.ToLower(msg)
+		if strings.Contains(lower, "access") || strings.Contains(lower, "denied") || strings.Contains(lower, "permission") || strings.Contains(lower, "privileg") {
 			return ApplyResult{Code: "need_elevation", Message: "Administrator access required.", NeedsElevation: true}
 		}
 		return errResult("apply_failed", "Could not apply DNS settings.")

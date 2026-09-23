@@ -4,6 +4,8 @@ import {main} from '../models';
 
 export function ApplyDNS(arg1:string,arg2:Array<string>,arg3:boolean):Promise<main.ApplyResult>;
 
+export function ClearProxy():Promise<main.ApplyResult>;
+
 export function DeleteCustomProfile(arg1:string):Promise<main.ApplyResult>;
 
 export function ElevationReason():Promise<string>;
@@ -18,6 +20,8 @@ export function GetPlatform():Promise<string>;
 
 export function GetPresets():Promise<Array<main.DNSProfile>>;
 
+export function GetProxy():Promise<main.ProxyConfig>;
+
 export function GetSettings():Promise<main.AppSettings>;
 
 export function IsElevated():Promise<boolean>;
@@ -30,9 +34,13 @@ export function ResetToDHCP(arg1:string,arg2:boolean):Promise<main.ApplyResult>;
 
 export function SaveCustomProfile(arg1:main.DNSProfile):Promise<main.ApplyResult>;
 
+export function SetDNSEnabled(arg1:boolean):Promise<main.ApplyResult>;
+
 export function SetFavorite(arg1:string,arg2:boolean):Promise<main.ApplyResult>;
 
 export function SetPreferences(arg1:string,arg2:string,arg3:string,arg4:boolean):Promise<main.ApplyResult>;
+
+export function SetProxy(arg1:main.ProxyConfig):Promise<main.ApplyResult>;
 
 export function TestAll():Promise<Array<main.PingResult>>;
 

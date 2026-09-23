@@ -30,6 +30,17 @@ export interface AppSettings {
   customProfiles: DNSProfile[];
   lastInterface: string;
   applyToAll: boolean;
+  dnsEnabled: boolean;
+  lastAppliedServers: string[];
+  proxy: ProxyConfig;
+}
+
+export interface ProxyConfig {
+  enabled: boolean;
+  http: string;
+  https: string;
+  socks: string;
+  noProxy: string;
 }
 
 export interface ApplyResult {
